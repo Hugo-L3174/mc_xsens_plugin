@@ -71,7 +71,8 @@ void XsensRetargetting::start(mc_control::fsm::Controller & ctl)
                                                      rName, name(), rName);
   }
 
-  ctl.gui()->addElement(this, {"Xsens", robot_, "Offset base_link"},
+  ctl.gui()->addElement(this,
+                        {"Plugin", "Xsens", robot_, "Offset base_link"},
                         mc_rtc::gui::ArrayInput("Offset Translation", offset_.translation()),
                         mc_rtc::gui::RPYInput("Offset RPY", offset_.rotation()));
 
@@ -98,7 +99,7 @@ void XsensRetargetting::start(mc_control::fsm::Controller & ctl)
     if(isActiveBody(bodyName))
     {
       ctl.gui()->addElement(
-          this, {"Xsens", robot_, "Bodies", bodyName},
+          this, {"Plugin", "Xsens", robot_, "Bodies", bodyName},
           mc_rtc::gui::ArrayInput(
               "Offset translation [m]", [&bodyC]() { return bodyC.offset.translation(); },
               [&bodyC](const Eigen::Vector3d & offset) { bodyC.offset.translation() = offset; }),
@@ -108,10 +109,10 @@ void XsensRetargetting::start(mc_control::fsm::Controller & ctl)
     }
   }
 
-  ctl.gui()->addElement(
-      this, {}, mc_rtc::gui::Label("Current motion:", [this]() -> const std::string & { return name(); }),
-      mc_rtc::gui::Button(fmt::format("Stop in {}s", endInterpolationTime_), [this]() { finishRequested_ = true; }),
-      mc_rtc::gui::Label("Finished?", finished_), mc_rtc::gui::Input("Transition to NEXT STATE", autoTransition_));
+  // ctl.gui()->addElement(
+  //     this, {}, mc_rtc::gui::Label("Current motion:", [this]() -> const std::string & { return name(); }),
+  //     mc_rtc::gui::Button(fmt::format("Stop in {}s", endInterpolationTime_), [this]() { finishRequested_ = true; }),
+  //     mc_rtc::gui::Label("Finished?", finished_), mc_rtc::gui::Input("Transition to NEXT STATE", autoTransition_));
 
   config_("initialInterpolationTime", initialInterpolationTime_);
   config_("initialStiffnessPercent", initialStiffnessPercent_);
@@ -156,8 +157,9 @@ void XsensRetargetting::start(mc_control::fsm::Controller & ctl)
 
     if(robot.hasBody(bodyName))
     {
-      auto task = std::make_shared<mc_tasks::TransformTask>(robot.frame(bodyName), body.stiffness, body.weight);
-      task->name(fmt::format("{}", bodyName));
+      auto task = std::make_shared<mc_tasks::TransformTask>(robot.frame(bodyName), body.stiffness, body.weight, false, false);
+      task->name(fmt::format("Retargetting_{}_{}", robot.name(), bodyName));
+      // task->name(fmt::format("{}", bodyName));
       task->reset();
       task->selectUnactiveJoints(ctl.solver(), unactiveJoints_);
       ctl.solver().addTask(task.get());
@@ -244,10 +246,14 @@ bool XsensRetargetting::run(mc_control::fsm::Controller & ctl)
       {
         auto & bodyTask = *tasks_[bodyName];
         bodyTask.dimWeight(dimW);
-        bodyTask.stiffness(percentStiffness * body.stiffness);
-        bodyTask.weight(percentWeight * body.weight);
+        // bodyTask.stiffness(percentStiffness * body.stiffness);
+        // bodyTask.weight(percentWeight * body.weight);
+        bodyTask.stiffness(body.stiffness);
+        bodyTask.weight(body.weight);
 
         auto & segmentPose = plugin_->data().segment_poses_[segmentName];
+        auto & segmentVel = plugin_->data().segment_vels_[segmentName];
+        auto & segmentAcc = plugin_->data().segment_accs_[segmentName];
 
         if(body.forceHorizontalSegment)
         {
@@ -262,10 +268,13 @@ bool XsensRetargetting::run(mc_control::fsm::Controller & ctl)
           auto X_blSP_segmentPose = segmentPose * baseLinkSegmentPose.inv(); // blSP: BaseLink_segmentationPose
           auto X_0_target = body.offset * X_blSP_segmentPose * offset_ * initPosW_;
           bodyTask.target(X_0_target);
+          // TODO find equivalent for fixed base link to target vel and acc
         }
         else
         { // Directly apply world segment pose as obtained from w.r.t a fixed initial robot base linkom Xsens MVN
           bodyTask.target(body.offset * segmentPose * offset_); // change the target position
+          bodyTask.refVelB(segmentVel);
+          bodyTask.refAccel(segmentAcc);
         }
       }
       catch(...)
