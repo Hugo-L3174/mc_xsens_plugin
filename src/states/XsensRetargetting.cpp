@@ -291,45 +291,47 @@ bool XsensRetargetting::run(mc_control::fsm::Controller & ctl)
     fixedBodyTask->weight(percentWeight * fixedWeight_);
   }
 
-  if(ds.has("Replay::GetCurrentTime"))
-  {
-    auto currentTime = ds.call<double>("Replay::GetCurrentTime");
-    if(finishRequested_ && !finishing_)
-    { // Requesting finishing early (before the end of the trajectory, start lowering stiffness now)
-      mc_rtc::log::info("[{}] Requesting finishing after interpolation, stopping in {}s", endInterpolationTime_);
-      finishing_ = true;
-      auto endTime = ds.call<double>("Replay::GetEndTime");
-      endTime_ = std::min(currentTime + endInterpolationTime_, endTime); // end after interpolation
-    }
-    else if(!finishing_) { endTime_ = ds.call<double>("Replay::GetEndTime"); }
+  // This section lowers stiffness at the end of the replay to be safe on the real robot, but this stops retargetting in simulation as well
 
-    auto remainingTime = endTime_ - currentTime;
-    double interpolationDuration = endStiffnessInterpolator_.values().back().first;
-    // REDUCE STIFFNESS BEFORE STOPPING TO PREVENT DISCONTINUITIES
-    // Here the trajectory is almost finished
-    if(remainingTime <= 0)
-    {
-      finished_ = true;
-      return autoTransition_;
-    }
-    else if(remainingTime <= interpolationDuration)
-    {
-      finishing_ = true;
-      double endPercentStiffness = endStiffnessInterpolator_.compute(interpolationDuration - (remainingTime));
-      double endPercentWeight = endWeightInterpolator_.compute(interpolationDuration - (remainingTime));
-      for(const auto & bodyName : activeBodies_)
-      {
-        const auto & body = bodyConfigurations_[bodyName];
-        tasks_[bodyName]->stiffness(endPercentStiffness * body.stiffness);
-        tasks_[bodyName]->weight(endPercentWeight * body.weight);
-      }
-      for(const auto & [fixedBodyName, fixedBodyTask] : fixedTasks_)
-      {
-        fixedBodyTask->stiffness(endPercentStiffness * fixedStiffness_);
-        fixedBodyTask->weight(endPercentWeight * fixedWeight_);
-      }
-    }
-  }
+  // if(ds.has("Replay::GetCurrentTime"))
+  // {
+  //   auto currentTime = ds.call<double>("Replay::GetCurrentTime");
+  //   if(finishRequested_ && !finishing_)
+  //   { // Requesting finishing early (before the end of the trajectory, start lowering stiffness now)
+  //     mc_rtc::log::info("[{}] Requesting finishing after interpolation, stopping in {}s", endInterpolationTime_);
+  //     finishing_ = true;
+  //     auto endTime = ds.call<double>("Replay::GetEndTime");
+  //     endTime_ = std::min(currentTime + endInterpolationTime_, endTime); // end after interpolation
+  //   }
+  //   else if(!finishing_) { endTime_ = ds.call<double>("Replay::GetEndTime"); }
+
+  //   auto remainingTime = endTime_ - currentTime;
+  //   double interpolationDuration = endStiffnessInterpolator_.values().back().first;
+  //   // REDUCE STIFFNESS BEFORE STOPPING TO PREVENT DISCONTINUITIES
+  //   // Here the trajectory is almost finished
+  //   if(remainingTime <= 0)
+  //   {
+  //     finished_ = true;
+  //     return autoTransition_;
+  //   }
+  //   else if(remainingTime <= interpolationDuration)
+  //   {
+  //     finishing_ = true;
+  //     double endPercentStiffness = endStiffnessInterpolator_.compute(interpolationDuration - (remainingTime));
+  //     double endPercentWeight = endWeightInterpolator_.compute(interpolationDuration - (remainingTime));
+  //     for(const auto & bodyName : activeBodies_)
+  //     {
+  //       const auto & body = bodyConfigurations_[bodyName];
+  //       tasks_[bodyName]->stiffness(endPercentStiffness * body.stiffness);
+  //       tasks_[bodyName]->weight(endPercentWeight * body.weight);
+  //     }
+  //     for(const auto & [fixedBodyName, fixedBodyTask] : fixedTasks_)
+  //     {
+  //       fixedBodyTask->stiffness(endPercentStiffness * fixedStiffness_);
+  //       fixedBodyTask->weight(endPercentWeight * fixedWeight_);
+  //     }
+  //   }
+  // }
 
   t_ += ctl.timeStep;
   return false;
