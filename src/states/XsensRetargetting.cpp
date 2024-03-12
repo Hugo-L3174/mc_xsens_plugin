@@ -245,11 +245,9 @@ bool XsensRetargetting::run(mc_control::fsm::Controller & ctl)
       try
       {
         auto & bodyTask = *tasks_[bodyName];
-        bodyTask.dimWeight(dimW);
+        // bodyTask.dimWeight(dimW);
         // bodyTask.stiffness(percentStiffness * body.stiffness);
         // bodyTask.weight(percentWeight * body.weight);
-        bodyTask.stiffness(body.stiffness);
-        bodyTask.weight(body.weight);
 
         auto & segmentPose = plugin_->data().segment_poses_[segmentName];
         auto & segmentVel = plugin_->data().segment_vels_[segmentName];
